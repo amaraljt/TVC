@@ -1,8 +1,0 @@
-{
-	"InstallScripts" : 
-	[
-		"/home/szensei/projects/TVC/tvc/build/Debug/cmake_install.cmake",
-		"/home/szensei/projects/TVC/tvc/build/Debug/cmake/stm32cubemx/cmake_install.cmake"
-	],
-	"Parallel" : false
-}
