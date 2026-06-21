@@ -56,3 +56,4 @@ dkms.conf
 
 # CMake Build Output
 tvc/build/
+.vscode/
