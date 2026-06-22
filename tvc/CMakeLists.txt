@@ -46,8 +46,9 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     Core/Src/main.c
-    Drivers/SPI/spi_driver.c
+    Drivers/SPI/hal_spi.c
     Drivers/ISM330DLC/ism300dlc.c
+    Drivers/BMP280/bmp280.c
 )
 
 # Add include paths
@@ -55,6 +56,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
     Drivers/SPI/
     Drivers/ISM330DLC/
+    Drivers/BMP280/
 )
 
 # Add project symbols (macros)
