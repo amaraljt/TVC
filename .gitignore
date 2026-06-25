@@ -1,0 +1,6 @@
+# Build output – regenerated, never committed
+build/
+
+# OS clutter
+.DS_Store
+Thumbs.db
