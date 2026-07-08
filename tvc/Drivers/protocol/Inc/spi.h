@@ -82,10 +82,8 @@
 extern SPI_HandleTypeDef hspi1;
 
 /* GPIO Control */
-void SPI_CS_Low(void);
-void SPI_CS_High(void);
-void SPI_CE_Low(void);
-void SPI_CE_High(void);
+void SPI_CS_Low(GPIO_TypeDef *port, uint16_t pin);
+void SPI_CS_High(GPIO_TypeDef *port, uint16_t pin);
 
 /* SPI Transfer */
 uint8_t SPI_Transfer(uint8_t data);
