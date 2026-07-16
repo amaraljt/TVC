@@ -1,9 +1,12 @@
 #include "main.h"
 #include "clock.h"
 #include "gpio.h"
+#include "stm32f4xx_hal.h"
 #include "tim.h"
 #include "spi.h"
 #include "uart.h"
+#include "ism300dlc.h"
+#include "bmp280.h"
 
 int main(void)
 {
@@ -14,10 +17,13 @@ int main(void)
   UART_Init();
   TIM_Init();
 
+  IMU_Init();
+
   while (1)
   {
-    // PID Loop
-    
+    IMU_Get_Gyro_Out();
+    IMU_Get_Accel_Out();
+    HAL_Delay(2000);
   }
 }
 
