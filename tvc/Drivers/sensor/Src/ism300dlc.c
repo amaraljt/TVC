@@ -18,12 +18,19 @@
 #define R_GYRO_OUT_X    0x22
 #define R_ACCEL_OUT_X   0x28
 
-#define ODR_416    0x60
+#define ODR_416_2G         0x60
+#define ODR_416_250_DPS    0x60
 
 #define STATUS_XLDA   0x01
 #define STATUS_GDA    0x02
 
-GyroPosition g_gyro_pos = {0};
+#define NUM_SAMPLES    200
+#define GYRO_SENSITIVITY     8.75f /* 250dps */
+#define ACCEL_SENSITIVITY    0.061f /* +-2g */
+#define DEG_TO_RAD    0.017453293f
+
+GyroBias g_gyro_bias = {0};
+GyroRps g_gyro_rps = {0};
 AccelPosition g_accel_pos = {0};
 
 uint8_t IMU_Whoami(void)
@@ -39,33 +46,6 @@ uint8_t IMU_Whoami(void)
     return 0;
 }
 
-void IMU_Init(void)
-{
-    if (IMU_Whoami() != 0)
-        return;
-
-    SPI_CS_Low(IMU_CS_PORT, IMU_CS_PIN);
-    SPI_Send(R_ACCEL_CFG, ODR_416, SPI_WRITE);
-    SPI_CS_High(IMU_CS_PORT, IMU_CS_PIN);
-
-    SPI_CS_Low(IMU_CS_PORT, IMU_CS_PIN);
-    SPI_Send(R_GYRO_CFG, ODR_416, SPI_WRITE);
-    SPI_CS_High(IMU_CS_PORT, IMU_CS_PIN);
-
-    SPI_CS_Low(IMU_CS_PORT, IMU_CS_PIN);
-    uint8_t xl_readback = SPI_Send(R_ACCEL_CFG, 0xFF, SPI_READ);
-    SPI_CS_High(IMU_CS_PORT, IMU_CS_PIN);
-
-    SPI_CS_Low(IMU_CS_PORT, IMU_CS_PIN);
-    uint8_t g_readback = SPI_Send(R_GYRO_CFG, 0xFF, SPI_READ);
-    SPI_CS_High(IMU_CS_PORT, IMU_CS_PIN);
-
-    if (xl_readback != ODR_416)
-        UART_Print("CTRL1_XL MISMATCH: wrote 0x%02X, read 0x%02X\r\n", ODR_416, xl_readback);
-    if (g_readback != ODR_416)
-        UART_Print("CTRL2_G MISMATCH: wrote 0x%02X, read 0x%02X\r\n", ODR_416, g_readback);
-}
-
 void IMU_Read_Burst(uint8_t reg, uint8_t *buf)
 {
     SPI_BurstRead(IMU_CS_PORT, IMU_CS_PIN, reg, buf, 6);
@@ -79,25 +59,46 @@ uint8_t IMU_Read_Status(void)
     return status;
 }
 
-void IMU_Get_Gyro_Out(void)
+uint8_t IMU_Get_Gyro_Out(void)
 {
     uint8_t buf[6];
     uint8_t status = IMU_Read_Status();
     if (!(status & STATUS_GDA)) {
         UART_Print("GYRO NOT READY: STATUS=0x%02X\r\n", status);
-        return;
+        return 1;
     }
 
     IMU_Read_Burst(R_GYRO_OUT_X, buf);
 
-    g_gyro_pos.gyro_x = (int16_t)((buf[1] << 8) | buf[0]);
-    g_gyro_pos.gyro_y = (int16_t)((buf[3] << 8) | buf[2]);
-    g_gyro_pos.gyro_z = (int16_t)((buf[5] << 8) | buf[4]);
+    int16_t g_lsb_x = (int16_t)((buf[1] << 8) | buf[0]);
+    int16_t g_lsb_y = (int16_t)((buf[3] << 8) | buf[2]);
+    int16_t g_lsb_z = (int16_t)((buf[5] << 8) | buf[4]);
 
-    UART_Print("Gyro X: %d  Y: %d  Z: %d\r\n",
-               g_gyro_pos.gyro_x,
-               g_gyro_pos.gyro_y,
-               g_gyro_pos.gyro_z);
+    // Convert LSB to rad/s
+    g_gyro_rps.gyro_x = ((float)(g_lsb_x * GYRO_SENSITIVITY) / 1000) * DEG_TO_RAD;
+    g_gyro_rps.gyro_y = ((float)(g_lsb_y * GYRO_SENSITIVITY) / 1000) * DEG_TO_RAD;
+    g_gyro_rps.gyro_z = ((float)(g_lsb_z * GYRO_SENSITIVITY) / 1000) * DEG_TO_RAD;
+
+    return 0;
+}
+
+void IMU_Callibrate_Gyro(void)
+{
+    float gyro_sum_x = 0, gyro_sum_y = 0, gyro_sum_z = 0;
+
+    for (int i = 0; i < NUM_SAMPLES; ) {
+        if (IMU_Get_Gyro_Out() != 0) // rad/s data; skip and retry if not ready yet
+            continue;
+
+        gyro_sum_x += g_gyro_rps.gyro_x;
+        gyro_sum_y += g_gyro_rps.gyro_y;
+        gyro_sum_z += g_gyro_rps.gyro_z;
+        i++;
+    }
+
+    g_gyro_bias.gyro_x = gyro_sum_x / NUM_SAMPLES;
+    g_gyro_bias.gyro_y = gyro_sum_y / NUM_SAMPLES;
+    g_gyro_bias.gyro_z = gyro_sum_z / NUM_SAMPLES;
 }
 
 void IMU_Get_Accel_Out(void)
@@ -119,4 +120,42 @@ void IMU_Get_Accel_Out(void)
                g_accel_pos.accel_x,
                g_accel_pos.accel_y,
                g_accel_pos.accel_z);
+}
+
+/* TEST */
+void Gyro_Print(void)
+{
+    UART_Print("Gyro X: %.4f  Y: %.4f  Z: %.4f\r\n",
+            g_gyro_rps.gyro_x - g_gyro_bias.gyro_x,
+            g_gyro_rps.gyro_y - g_gyro_bias.gyro_y,
+            g_gyro_rps.gyro_z - g_gyro_bias.gyro_z);
+}
+
+void IMU_Init(void)
+{
+    if (IMU_Whoami() != 0)
+        return;
+
+    SPI_CS_Low(IMU_CS_PORT, IMU_CS_PIN);
+    SPI_Send(R_ACCEL_CFG, ODR_416_2G, SPI_WRITE);
+    SPI_CS_High(IMU_CS_PORT, IMU_CS_PIN);
+
+    SPI_CS_Low(IMU_CS_PORT, IMU_CS_PIN);
+    SPI_Send(R_GYRO_CFG, ODR_416_2G, SPI_WRITE);
+    SPI_CS_High(IMU_CS_PORT, IMU_CS_PIN);
+
+    SPI_CS_Low(IMU_CS_PORT, IMU_CS_PIN);
+    uint8_t xl_readback = SPI_Send(R_ACCEL_CFG, 0xFF, SPI_READ);
+    SPI_CS_High(IMU_CS_PORT, IMU_CS_PIN);
+
+    SPI_CS_Low(IMU_CS_PORT, IMU_CS_PIN);
+    uint8_t g_readback = SPI_Send(R_GYRO_CFG, 0xFF, SPI_READ);
+    SPI_CS_High(IMU_CS_PORT, IMU_CS_PIN);
+
+    if (xl_readback != ODR_416_2G)
+        UART_Print("CTRL1_XL MISMATCH: wrote 0x%02X, read 0x%02X\r\n", ODR_416_2G, xl_readback);
+    if (g_readback != ODR_416_2G)
+        UART_Print("CTRL2_G MISMATCH: wrote 0x%02X, read 0x%02X\r\n", ODR_416_2G, g_readback);
+
+    IMU_Callibrate_Gyro();
 }
