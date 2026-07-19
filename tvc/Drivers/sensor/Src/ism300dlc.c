@@ -31,7 +31,7 @@
 
 GyroBias g_gyro_bias = {0};
 GyroRps g_gyro_rps = {0};
-AccelPosition g_accel_pos = {0};
+AccelGs g_accel_gs = {0};
 
 uint8_t IMU_Whoami(void)
 {
@@ -101,34 +101,40 @@ void IMU_Callibrate_Gyro(void)
     g_gyro_bias.gyro_z = gyro_sum_z / NUM_SAMPLES;
 }
 
-void IMU_Get_Accel_Out(void)
+uint8_t IMU_Get_Accel_Out(void)
 {
     uint8_t buf[6];
     uint8_t status = IMU_Read_Status();
     if (!(status & STATUS_XLDA)) {
         UART_Print("ACCEL NOT READY: STATUS=0x%02X\r\n", status);
-        return;
+        return 1;
     }
 
     IMU_Read_Burst(R_ACCEL_OUT_X, buf);
 
-    g_accel_pos.accel_x = (int16_t)((buf[1] << 8) | buf[0]);
-    g_accel_pos.accel_y = (int16_t)((buf[3] << 8) | buf[2]);
-    g_accel_pos.accel_z = (int16_t)((buf[5] << 8) | buf[4]);
+    int16_t a_lsb_x = (int16_t)((buf[1] << 8) | buf[0]);
+    int16_t a_lsb_y = (int16_t)((buf[3] << 8) | buf[2]);
+    int16_t a_lsb_z = (int16_t)((buf[5] << 8) | buf[4]);
 
-    UART_Print("Accel X: %d  Y: %d  Z: %d\r\n",
-               g_accel_pos.accel_x,
-               g_accel_pos.accel_y,
-               g_accel_pos.accel_z);
+    // Convert LSB to gs
+    g_accel_gs.accel_x = ((float)(a_lsb_x * ACCEL_SENSITIVITY) / 1000);
+    g_accel_gs.accel_y = ((float)(a_lsb_y * ACCEL_SENSITIVITY) / 1000);
+    g_accel_gs.accel_z = ((float)(a_lsb_z * ACCEL_SENSITIVITY) / 1000);
+
+    return 0;
 }
 
-/* TEST */
-void Gyro_Print(void)
+void IMU_Print(void)
 {
     UART_Print("Gyro X: %.4f  Y: %.4f  Z: %.4f\r\n",
             g_gyro_rps.gyro_x - g_gyro_bias.gyro_x,
             g_gyro_rps.gyro_y - g_gyro_bias.gyro_y,
             g_gyro_rps.gyro_z - g_gyro_bias.gyro_z);
+
+    UART_Print("Accel X: %.4f  Y: %.4f  Z: %.4f\r\n",
+            g_accel_gs.accel_x,
+            g_accel_gs.accel_y,
+            g_accel_gs.accel_z);
 }
 
 void IMU_Init(void)

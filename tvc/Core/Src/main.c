@@ -22,8 +22,8 @@ int main(void)
   while (1)
   {
     IMU_Get_Gyro_Out();
-    Gyro_Print();
-    //IMU_Get_Accel_Out();
+    IMU_Get_Accel_Out();
+    IMU_Print();
     HAL_Delay(500);
   }
 }
