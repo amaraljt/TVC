@@ -126,7 +126,7 @@ uint8_t IMU_Get_Accel_Out(void)
 
 void IMU_Print(void)
 {
-    UART_Print("Gyro X: %.4f  Y: %.4f  Z: %.4f\r\n",
+    UART_Print("\n\nGyro X: %.4f  Y: %.4f  Z: %.4f\r\n\n\n",
             g_gyro_rps.gyro_x - g_gyro_bias.gyro_x,
             g_gyro_rps.gyro_y - g_gyro_bias.gyro_y,
             g_gyro_rps.gyro_z - g_gyro_bias.gyro_z);

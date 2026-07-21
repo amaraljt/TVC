@@ -140,17 +140,19 @@ uint8_t BMP_Init(void)
     if (readback != CTRL_MEAS_CFG)
         UART_Print("BMP280 CTRL_MEAS MISMATCH: wrote 0x%02X, read 0x%02X\r\n", CTRL_MEAS_CFG, readback);
 
+    /* wait out one full measure+standby cycle so the output registers hold real data,
+       not the power-on-reset default; every read after this is safe unconditionally
+       since normal mode double-buffers the output registers. a fixed delay is used
+       instead of polling STATUS_MEASURING since the bit may not have risen yet by
+       the time we'd check it, right after enabling normal mode */
+    HAL_Delay(50);
+
     return 0;
 }
 
 uint8_t BMP_Get_Baro_Out(void)
 {
     uint8_t buf[6];
-    uint8_t status = BMP_Read_Status();
-    if (status & STATUS_MEASURING) {
-        UART_Print("BMP280 NOT READY: STATUS=0x%02X\r\n", status);
-        return 1;
-    }
 
     SPI_BurstRead(ALT_CS_PORT, ALT_CS_PIN, R_PRESS_OUT, buf, 6);
 
@@ -165,7 +167,7 @@ uint8_t BMP_Get_Baro_Out(void)
 
 void BMP_Print(void)
 {
-    UART_Print("Baro Temp: %.2f C  Press: %.2f Pa\r\n",
+    UART_Print("Baro Temp: %.2f C  Press: %.2f Pa\r\n\n\n",
             g_baro_data.temp_c,
             g_baro_data.press_pa);
 }

@@ -17,14 +17,15 @@ int main(void)
   UART_Init();
   TIM_Init();
 
-  //IMU_Init();
+  IMU_Init();
   BMP_Init();
 
   while (1)
   {
-    //IMU_Get_Gyro_Out();
-    //IMU_Get_Accel_Out();
-    //IMU_Print();
+    IMU_Get_Gyro_Out();
+    IMU_Get_Accel_Out();
+    IMU_Print();
+    HAL_Delay(500);
 
     BMP_Get_Baro_Out();
     BMP_Print();
