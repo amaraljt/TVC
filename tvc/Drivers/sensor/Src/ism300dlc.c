@@ -29,9 +29,17 @@
 #define ACCEL_SENSITIVITY    0.061f /* +-2g */
 #define DEG_TO_RAD    0.017453293f
 
-GyroBias g_gyro_bias = {0};
-GyroRps g_gyro_rps = {0};
-AccelGs g_accel_gs = {0};
+#define MAHONY_KP    1.0f
+#define MAHONY_KI    0.1f
+
+Vector g_gyro_rps = {0,0,0};
+Vector g_gyro_bias = {0,0,0};
+Vector g_accel_gs = {0,0,0};
+Quat g_gravity_quat = {0,0,0,1};
+Quat g_cur_quat = {1,0,0,0};
+Vector v_res_bias = {0,0,0};
+
+uint8_t gyro_callibration = -1;
 
 uint8_t IMU_Whoami(void)
 {
@@ -75,9 +83,15 @@ uint8_t IMU_Get_Gyro_Out(void)
     int16_t g_lsb_z = (int16_t)((buf[5] << 8) | buf[4]);
 
     // Convert LSB to rad/s
-    g_gyro_rps.gyro_x = ((float)(g_lsb_x * GYRO_SENSITIVITY) / 1000) * DEG_TO_RAD;
-    g_gyro_rps.gyro_y = ((float)(g_lsb_y * GYRO_SENSITIVITY) / 1000) * DEG_TO_RAD;
-    g_gyro_rps.gyro_z = ((float)(g_lsb_z * GYRO_SENSITIVITY) / 1000) * DEG_TO_RAD;
+    g_gyro_rps.x = ((float)(g_lsb_x * GYRO_SENSITIVITY) / 1000) * DEG_TO_RAD;
+    g_gyro_rps.y = ((float)(g_lsb_y * GYRO_SENSITIVITY) / 1000) * DEG_TO_RAD;
+    g_gyro_rps.z = ((float)(g_lsb_z * GYRO_SENSITIVITY) / 1000) * DEG_TO_RAD;
+
+    if(!gyro_callibration) {
+        g_gyro_rps.x -= g_gyro_bias.x;
+        g_gyro_rps.y -= g_gyro_bias.y;
+        g_gyro_rps.z -= g_gyro_bias.z;
+    }
 
     return 0;
 }
@@ -85,20 +99,23 @@ uint8_t IMU_Get_Gyro_Out(void)
 void IMU_Callibrate_Gyro(void)
 {
     float gyro_sum_x = 0, gyro_sum_y = 0, gyro_sum_z = 0;
+    gyro_callibration = 1;
 
     for (int i = 0; i < NUM_SAMPLES; ) {
         if (IMU_Get_Gyro_Out() != 0) // rad/s data; skip and retry if not ready yet
             continue;
 
-        gyro_sum_x += g_gyro_rps.gyro_x;
-        gyro_sum_y += g_gyro_rps.gyro_y;
-        gyro_sum_z += g_gyro_rps.gyro_z;
+        gyro_sum_x += g_gyro_rps.x;
+        gyro_sum_y += g_gyro_rps.y;
+        gyro_sum_z += g_gyro_rps.z;
         i++;
     }
 
-    g_gyro_bias.gyro_x = gyro_sum_x / NUM_SAMPLES;
-    g_gyro_bias.gyro_y = gyro_sum_y / NUM_SAMPLES;
-    g_gyro_bias.gyro_z = gyro_sum_z / NUM_SAMPLES;
+    g_gyro_bias.x = gyro_sum_x / NUM_SAMPLES;
+    g_gyro_bias.y = gyro_sum_y / NUM_SAMPLES;
+    g_gyro_bias.z = gyro_sum_z / NUM_SAMPLES;
+
+    gyro_callibration = 0;
 }
 
 uint8_t IMU_Get_Accel_Out(void)
@@ -117,24 +134,26 @@ uint8_t IMU_Get_Accel_Out(void)
     int16_t a_lsb_z = (int16_t)((buf[5] << 8) | buf[4]);
 
     // Convert LSB to gs
-    g_accel_gs.accel_x = ((float)(a_lsb_x * ACCEL_SENSITIVITY) / 1000);
-    g_accel_gs.accel_y = ((float)(a_lsb_y * ACCEL_SENSITIVITY) / 1000);
-    g_accel_gs.accel_z = ((float)(a_lsb_z * ACCEL_SENSITIVITY) / 1000);
+    g_accel_gs.x = ((float)(a_lsb_x * ACCEL_SENSITIVITY) / 1000);
+    g_accel_gs.y = ((float)(a_lsb_y * ACCEL_SENSITIVITY) / 1000);
+    g_accel_gs.z = ((float)(a_lsb_z * ACCEL_SENSITIVITY) / 1000);
 
     return 0;
 }
 
 void IMU_Print(void)
 {
+#if 0
     UART_Print("\n\nGyro X: %.4f  Y: %.4f  Z: %.4f\r\n\n\n",
-            g_gyro_rps.gyro_x - g_gyro_bias.gyro_x,
-            g_gyro_rps.gyro_y - g_gyro_bias.gyro_y,
-            g_gyro_rps.gyro_z - g_gyro_bias.gyro_z);
-
+            g_gyro_rps.gyro_x - g_gyro_bias.x,
+            g_gyro_rps.gyro_y - g_gyro_bias.y,
+            g_gyro_rps.gyro_z - g_gyro_bias.z);
+#else
     UART_Print("Accel X: %.4f  Y: %.4f  Z: %.4f\r\n",
-            g_accel_gs.accel_x,
-            g_accel_gs.accel_y,
-            g_accel_gs.accel_z);
+            g_accel_gs.x,
+            g_accel_gs.y,
+            g_accel_gs.z);
+#endif
 }
 
 void IMU_Init(void)
@@ -164,4 +183,187 @@ void IMU_Init(void)
         UART_Print("CTRL2_G MISMATCH: wrote 0x%02X, read 0x%02X\r\n", ODR_416_2G, g_readback);
 
     IMU_Callibrate_Gyro();
+}
+
+// TODO: add feedback loop
+void IMU_Mahony_Filter()
+{
+    Vector v_grav_body, v_accel_err, v_gyro_corrected;
+    Quat q_gyro_rate_of_change, q_orientation_new;
+
+    UART_Print("Unnormalized Accel in Gs | X: %.4f  Y: %.4f  Z: %.4f\r\n",
+                g_accel_gs.x,
+                g_accel_gs.y,
+                g_accel_gs.z);
+    IMU_Normalize_Vec(&g_accel_gs);  // reduce to direction only, magnitude discarded
+
+    UART_Print("Normalized Accel in Gs | X: %.4f  Y: %.4f  Z: %.4f\r\n", g_accel_gs.x, g_accel_gs.y, g_accel_gs.z);
+    /* Gravity Reference from Earth to Body Frame */
+    v_grav_body = IMU_Predicted_Gravity_Direction();
+
+    UART_Print("Gravity in body frame X: %.4f  Y: %.4f  Z: %.4f\r\n", v_grav_body.x, v_grav_body.y, v_grav_body.z);
+
+    /* acceleration error */
+    v_accel_err = IMU_Acceleration_Error(g_accel_gs, v_grav_body);
+
+    UART_Print("Acceleration error e X: %.4f  Y: %.4f  Z: %.4f\r\n", v_accel_err.x, v_accel_err.y, v_accel_err.z);
+
+    /* Get corrected orientation using PI controller Kp/Ki */
+    v_gyro_corrected = IMU_Corrected_Orientation(v_accel_err);
+
+    UART_Print("Gyro corrected X: %.4f  Y: %.4f  Z: %.4f\r\n", v_gyro_corrected.x, v_gyro_corrected.y, v_gyro_corrected.z);
+
+
+    /* Take derivative of quaternion */
+    q_gyro_rate_of_change = IMU_Rate_Of_Change(v_gyro_corrected);
+    UART_Print("Rate of change quat W: %.4f  X: %.4f  Y: %.4f  Z: %.4f\r\n", q_gyro_rate_of_change.w, q_gyro_rate_of_change.x, q_gyro_rate_of_change.y, q_gyro_rate_of_change.z);
+
+    /* Integrate */
+    q_orientation_new = IMU_Update_Orientation(q_gyro_rate_of_change);
+    UART_Print("New orientation W: %.4f  X: %.4f  Y: %.4f  Z: %.4f\r\n", q_orientation_new.w, q_orientation_new.x, q_orientation_new.y, q_orientation_new.z);
+
+    /* Normalize quaternion */
+    IMU_Normalize_Quat(&q_orientation_new);
+    UART_Print("New orientation Normalized W: %.4f  X: %.4f  Y: %.4f  Z: %.4f\r\n\n\n", q_orientation_new.w, q_orientation_new.x, q_orientation_new.y, q_orientation_new.z);
+
+    g_cur_quat = q_orientation_new;
+}
+
+Vector IMU_Cross_Product(Vector v1, Vector v2)
+{
+    Vector ret;
+
+    ret.x = (v1.y*v2.z - v1.z*v2.y);
+    ret.y = (v1.z*v2.x - v1.x*v2.z);
+    ret.z = (v1.x*v2.y - v1.y*v2.x);
+
+    return ret;
+}
+
+Quat IMU_Quat_Mult(Quat q1, Quat q2)
+{
+    Quat ret;
+
+    // Order matters
+    ret.w = (q1.w*q2.w) - (q1.x*q2.x) - (q1.y*q2.y) - (q1.z*q2.z);
+    ret.x = (q1.w*q2.x) + (q1.x*q2.w) + (q1.y*q2.z) - (q1.z*q2.y);
+    ret.y = (q1.w*q2.y) - (q1.x*q2.z) + (q1.y*q2.w) + (q1.z*q2.x);
+    ret.z = (q1.w*q2.z) + (q1.x*q2.y) - (q1.y*q2.x) + (q1.z*q2.w);
+
+    return ret;
+}
+
+/* e = a_meas X q_grav_body */
+Vector IMU_Acceleration_Error(Vector v_accel_meas, Vector v_grav_body)
+{
+    Vector ret;
+
+    ret = IMU_Cross_Product(v_accel_meas, v_grav_body);
+
+    return ret;
+}
+
+Vector IMU_Predicted_Gravity_Direction()
+{
+    // Inverse q_cur
+    Quat q_cur_inv;
+    Quat q_grav_body;
+    Vector v_grav_body;
+
+    q_cur_inv.w = g_cur_quat.w;
+    q_cur_inv.x = g_cur_quat.x * -1.0;
+    q_cur_inv.y = g_cur_quat.y * -1.0;
+    q_cur_inv.z = g_cur_quat.z * -1.0;
+
+    // quaternion sandwich
+    q_grav_body = IMU_Quat_Mult(IMU_Quat_Mult(q_cur_inv, g_gravity_quat),g_cur_quat);
+
+    // quat to vector (drop w)
+    v_grav_body.x = q_grav_body.x;
+    v_grav_body.y = q_grav_body.y;
+    v_grav_body.z = q_grav_body.z;
+
+    return v_grav_body;
+}
+
+void IMU_Normalize_Vec(Vector *v)
+{
+    double magnitude;
+
+    magnitude = sqrt((v->x*v->x) + (v->y*v->y) + (v->z*v->z));
+
+    v->x /= (float)magnitude;
+    v->y /= (float)magnitude;
+    v->z /= (float)magnitude;
+}
+
+void IMU_Normalize_Quat(Quat *q)
+{
+    double magnitude;
+
+    magnitude = sqrt((q->w*q->w) + (q->x*q->x) + (q->y*q->y) + (q->z*q->z));
+
+    q->w /= (float)magnitude;
+    q->x /= (float)magnitude;
+    q->y /= (float)magnitude;
+    q->z /= (float)magnitude;
+}
+
+Vector IMU_Corrected_Orientation(Vector v_accel_err)
+{
+    Vector v_gyro_corrected;
+    float time_delta = 1.0;
+
+    //TODO
+    //time_delta = time_cur - time_start;
+
+    v_res_bias.x += MAHONY_KI * v_accel_err.x * time_delta;
+    v_res_bias.y += MAHONY_KI * v_accel_err.y * time_delta;
+    v_res_bias.z += MAHONY_KI * v_accel_err.z * time_delta;
+
+    v_gyro_corrected.x = g_gyro_rps.x - v_res_bias.x + MAHONY_KP * v_accel_err.x;
+    v_gyro_corrected.y = g_gyro_rps.y - v_res_bias.y + MAHONY_KP * v_accel_err.y;
+    v_gyro_corrected.z = g_gyro_rps.z - v_res_bias.z + MAHONY_KP * v_accel_err.z;
+
+    return v_gyro_corrected;
+}
+
+/* Grabs rate of change of our orientation */
+Quat IMU_Rate_Of_Change(Vector v_gyro_corrected)
+{
+    Quat q_gyro_corrected, ret;
+
+    q_gyro_corrected.w = 0;
+    q_gyro_corrected.x = v_gyro_corrected.x;
+    q_gyro_corrected.y = v_gyro_corrected.y;
+    q_gyro_corrected.z = v_gyro_corrected.z;
+
+    ret = IMU_Quat_Mult(g_cur_quat, q_gyro_corrected);
+
+    ret.w /= 2.0;
+    ret.x /= 2.0;
+    ret.y /= 2.0;
+    ret.z /= 2.0;
+
+    return ret;
+}
+
+Quat IMU_Update_Orientation(Quat q_gyro_rate_of_change)
+{
+    Quat ret;
+    float time_delta = 1.0;
+
+    //TODO: Add timer
+
+    ret.w = q_gyro_rate_of_change.w * time_delta;
+    ret.x = q_gyro_rate_of_change.x * time_delta;
+    ret.y = q_gyro_rate_of_change.y * time_delta;
+    ret.z = q_gyro_rate_of_change.z * time_delta;
+
+    ret.w += g_cur_quat.w;
+    ret.x += g_cur_quat.x;
+    ret.y += g_cur_quat.y;
+    ret.z += g_cur_quat.z;
+    
+    return ret;
 }

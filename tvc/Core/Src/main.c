@@ -22,6 +22,7 @@ int main(void)
 
   while (1)
   {
+#if 0
     IMU_Get_Gyro_Out();
     IMU_Get_Accel_Out();
     IMU_Print();
@@ -30,6 +31,12 @@ int main(void)
     BMP_Get_Baro_Out();
     BMP_Print();
     HAL_Delay(500);
+#else
+    IMU_Get_Gyro_Out();
+    IMU_Get_Accel_Out();
+    IMU_Mahony_Filter();
+    HAL_Delay(5000);
+#endif
   }
 }
 
