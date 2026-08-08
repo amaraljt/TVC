@@ -53,6 +53,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Drivers/protocol/Src/uart.c
     Drivers/sensor/Src/ism300dlc.c
     Drivers/sensor/Src/bmp280.c
+    Drivers/App/Src/control.c
 )
 
 # Add include paths
@@ -61,6 +62,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     Core/BSP/Inc
     Drivers/protocol/Inc
     Drivers/sensor/Inc
+    Drivers/App/Inc
 )
 
 # Add project symbols (macros)

@@ -7,6 +7,7 @@
 #include "uart.h"
 #include "ism300dlc.h"
 #include "bmp280.h"
+#include "control.h"
 
 int main(void)
 {
@@ -20,23 +21,26 @@ int main(void)
   IMU_Init();
   BMP_Init();
 
+  TIM_Start();
+
+  uint32_t tick = 0;
+
   while (1)
   {
-#if 0
-    IMU_Get_Gyro_Out();
-    IMU_Get_Accel_Out();
-    IMU_Print();
-    HAL_Delay(500);
+    if (!g_loop_flag)
+      continue;
 
-    BMP_Get_Baro_Out();
-    BMP_Print();
-    HAL_Delay(500);
-#else
+    g_loop_flag = 0;
+    tick++;
+
     IMU_Get_Gyro_Out();
     IMU_Get_Accel_Out();
     IMU_Mahony_Filter();
-    HAL_Delay(5000);
-#endif
+
+    if ((tick % BARO_DIVIDER) == 0)
+      BMP_Get_Baro_Out();
+
+    PID_Control_Loop();
   }
 }
 

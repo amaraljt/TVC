@@ -1,6 +1,7 @@
 #include "ism300dlc.h"
 #include "spi.h"
 #include "uart.h"
+#include "tim.h"
 #include <stdint.h>
 
 #define IMU_CS_PORT   GPIOA
@@ -312,14 +313,10 @@ void IMU_Normalize_Quat(Quat *q)
 Vector IMU_Corrected_Orientation(Vector v_accel_err)
 {
     Vector v_gyro_corrected;
-    float time_delta = 1.0;
 
-    //TODO
-    //time_delta = time_cur - time_start;
-
-    v_res_bias.x += MAHONY_KI * v_accel_err.x * time_delta;
-    v_res_bias.y += MAHONY_KI * v_accel_err.y * time_delta;
-    v_res_bias.z += MAHONY_KI * v_accel_err.z * time_delta;
+    v_res_bias.x += MAHONY_KI * v_accel_err.x * CONTROL_DT;
+    v_res_bias.y += MAHONY_KI * v_accel_err.y * CONTROL_DT;
+    v_res_bias.z += MAHONY_KI * v_accel_err.z * CONTROL_DT;
 
     v_gyro_corrected.x = g_gyro_rps.x - v_res_bias.x + MAHONY_KP * v_accel_err.x;
     v_gyro_corrected.y = g_gyro_rps.y - v_res_bias.y + MAHONY_KP * v_accel_err.y;
@@ -351,14 +348,11 @@ Quat IMU_Rate_Of_Change(Vector v_gyro_corrected)
 Quat IMU_Update_Orientation(Quat q_gyro_rate_of_change)
 {
     Quat ret;
-    float time_delta = 1.0;
 
-    //TODO: Add timer
-
-    ret.w = q_gyro_rate_of_change.w * time_delta;
-    ret.x = q_gyro_rate_of_change.x * time_delta;
-    ret.y = q_gyro_rate_of_change.y * time_delta;
-    ret.z = q_gyro_rate_of_change.z * time_delta;
+    ret.w = q_gyro_rate_of_change.w * CONTROL_DT;
+    ret.x = q_gyro_rate_of_change.x * CONTROL_DT;
+    ret.y = q_gyro_rate_of_change.y * CONTROL_DT;
+    ret.z = q_gyro_rate_of_change.z * CONTROL_DT;
 
     ret.w += g_cur_quat.w;
     ret.x += g_cur_quat.x;
