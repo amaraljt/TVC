@@ -192,40 +192,25 @@ void IMU_Mahony_Filter()
     Vector v_grav_body, v_accel_err, v_gyro_corrected;
     Quat q_gyro_rate_of_change, q_orientation_new;
 
-    UART_Print("Unnormalized Accel in Gs | X: %.4f  Y: %.4f  Z: %.4f\r\n",
-                g_accel_gs.x,
-                g_accel_gs.y,
-                g_accel_gs.z);
     IMU_Normalize_Vec(&g_accel_gs);  // reduce to direction only, magnitude discarded
 
-    UART_Print("Normalized Accel in Gs | X: %.4f  Y: %.4f  Z: %.4f\r\n", g_accel_gs.x, g_accel_gs.y, g_accel_gs.z);
     /* Gravity Reference from Earth to Body Frame */
     v_grav_body = IMU_Predicted_Gravity_Direction();
-
-    UART_Print("Gravity in body frame X: %.4f  Y: %.4f  Z: %.4f\r\n", v_grav_body.x, v_grav_body.y, v_grav_body.z);
 
     /* acceleration error */
     v_accel_err = IMU_Acceleration_Error(g_accel_gs, v_grav_body);
 
-    UART_Print("Acceleration error e X: %.4f  Y: %.4f  Z: %.4f\r\n", v_accel_err.x, v_accel_err.y, v_accel_err.z);
-
     /* Get corrected orientation using PI controller Kp/Ki */
     v_gyro_corrected = IMU_Corrected_Orientation(v_accel_err);
 
-    UART_Print("Gyro corrected X: %.4f  Y: %.4f  Z: %.4f\r\n", v_gyro_corrected.x, v_gyro_corrected.y, v_gyro_corrected.z);
-
-
     /* Take derivative of quaternion */
     q_gyro_rate_of_change = IMU_Rate_Of_Change(v_gyro_corrected);
-    UART_Print("Rate of change quat W: %.4f  X: %.4f  Y: %.4f  Z: %.4f\r\n", q_gyro_rate_of_change.w, q_gyro_rate_of_change.x, q_gyro_rate_of_change.y, q_gyro_rate_of_change.z);
 
     /* Integrate */
     q_orientation_new = IMU_Update_Orientation(q_gyro_rate_of_change);
-    UART_Print("New orientation W: %.4f  X: %.4f  Y: %.4f  Z: %.4f\r\n", q_orientation_new.w, q_orientation_new.x, q_orientation_new.y, q_orientation_new.z);
 
     /* Normalize quaternion */
     IMU_Normalize_Quat(&q_orientation_new);
-    UART_Print("New orientation Normalized W: %.4f  X: %.4f  Y: %.4f  Z: %.4f\r\n\n\n", q_orientation_new.w, q_orientation_new.x, q_orientation_new.y, q_orientation_new.z);
 
     g_cur_quat = q_orientation_new;
 }

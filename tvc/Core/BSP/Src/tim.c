@@ -17,9 +17,9 @@ void TIM2_Init(void)
     TIM_OC_InitTypeDef sConfigOC = {0};
 
     htim2.Instance = TIM2;
-    htim2.Init.Prescaler = 7;
+    htim2.Init.Prescaler = (TIM2_CLK_HZ / TIM2_TICK_HZ) - 1;
     htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-    htim2.Init.Period = 999;
+    htim2.Init.Period = (TIM2_TICK_HZ / SERVO_FRAME_HZ) - 1;
     htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
     htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
     if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
@@ -42,7 +42,7 @@ void TIM2_Init(void)
         Error_Handler();
     }
     sConfigOC.OCMode = TIM_OCMODE_PWM1;
-    sConfigOC.Pulse = 0;
+    sConfigOC.Pulse = SERVO_CENTER_US;   /* start centered, not at an invalid 0us pulse */
     sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
     sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
     if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
@@ -92,7 +92,22 @@ void TIM_Init(void)
 
 void TIM_Start(void)
 {
+    HAL_TIM_PWM_Start(&htim2, SERVO_YAW_CH);
+    HAL_TIM_PWM_Start(&htim2, SERVO_PITCH_CH);
+
     HAL_TIM_Base_Start_IT(&htim5);
+}
+
+/* Sets a servo pulse width in microseconds. Clamps to the absolute servo
+   limits so a runaway control output can't drive the horn past its travel. */
+void TIM_Set_Servo_Us(uint32_t channel, uint32_t pulse_us)
+{
+    if (pulse_us < SERVO_MIN_US)
+        pulse_us = SERVO_MIN_US;
+    else if (pulse_us > SERVO_MAX_US)
+        pulse_us = SERVO_MAX_US;
+
+    __HAL_TIM_SET_COMPARE(&htim2, channel, pulse_us);
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
