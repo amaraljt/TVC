@@ -41,6 +41,9 @@ int main(void)
       BMP_Get_Baro_Out();
 
     PID_Control_Loop();
+
+    if ((tick % CONTROL_RATE_HZ) == 0)
+      PID_Print();
   }
 }
 

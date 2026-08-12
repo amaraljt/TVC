@@ -73,7 +73,7 @@ uint8_t IMU_Get_Gyro_Out(void)
     uint8_t buf[6];
     uint8_t status = IMU_Read_Status();
     if (!(status & STATUS_GDA)) {
-        UART_Print("GYRO NOT READY: STATUS=0x%02X\r\n", status);
+        //UART_Print("GYRO NOT READY: STATUS=0x%02X\r\n", status);
         return 1;
     }
 
@@ -124,7 +124,7 @@ uint8_t IMU_Get_Accel_Out(void)
     uint8_t buf[6];
     uint8_t status = IMU_Read_Status();
     if (!(status & STATUS_XLDA)) {
-        UART_Print("ACCEL NOT READY: STATUS=0x%02X\r\n", status);
+        //UART_Print("ACCEL NOT READY: STATUS=0x%02X\r\n", status);
         return 1;
     }
 
