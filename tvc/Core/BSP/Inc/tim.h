@@ -6,7 +6,14 @@
 
 #define TIM5_CLK_HZ       16000000UL   /* APB1 timer clock */
 #define TIM5_TICK_HZ      1000000UL    /* 1 tick = 1us, so CNT reads directly in us */
-#define CONTROL_RATE_HZ   400UL        /* matches the IMU's 416Hz ODR */
+/* TEMPORARY BENCH SETTING - was 400 (matched the IMU's 416Hz ODR).
+   Dropped to 50 so the UART traces in ism300dlc.c fit in the tick budget:
+   115200 baud carries ~11.5KB/s, so a 20ms tick affords ~230 bytes. 50Hz is
+   also SERVO_FRAME_HZ, and a hobby servo cannot consume updates faster than
+   its frame rate anyway, so nothing is lost on the actuator side.
+   Put this back to 400 once the traces come out. CONTROL_DT derives from it,
+   so the filter's integration timestep follows automatically. */
+#define CONTROL_RATE_HZ   50UL
 #define CONTROL_DT        (1.0f / (float)CONTROL_RATE_HZ)
 
 /* Read the barometer every Nth control tick (400Hz / 16 = 25Hz, and the BMP280

@@ -37,9 +37,6 @@ int main(void)
     IMU_Get_Accel_Out();
     IMU_Mahony_Filter();
 
-    if ((tick % BARO_DIVIDER) == 0)
-      BMP_Get_Baro_Out();
-
     PID_Control_Loop();
 
     if ((tick % CONTROL_RATE_HZ) == 0)

@@ -73,7 +73,7 @@ uint8_t IMU_Get_Gyro_Out(void)
     uint8_t buf[6];
     uint8_t status = IMU_Read_Status();
     if (!(status & STATUS_GDA)) {
-        //UART_Print("GYRO NOT READY: STATUS=0x%02X\r\n", status);
+        UART_Print("[gyro] NOT READY: STATUS=0x%02X (last sample reused)\r\n", status);
         return 1;
     }
 
@@ -92,6 +92,10 @@ uint8_t IMU_Get_Gyro_Out(void)
         g_gyro_rps.x -= g_gyro_bias.x;
         g_gyro_rps.y -= g_gyro_bias.y;
         g_gyro_rps.z -= g_gyro_bias.z;
+
+        /* post-bias rates, should sit within a few mrad/s of zero at rest */
+        UART_Print("[gyr] %.3f %.3f %.3f\r\n",
+                g_gyro_rps.x, g_gyro_rps.y, g_gyro_rps.z);
     }
 
     return 0;
@@ -116,6 +120,11 @@ void IMU_Callibrate_Gyro(void)
     g_gyro_bias.y = gyro_sum_y / NUM_SAMPLES;
     g_gyro_bias.z = gyro_sum_z / NUM_SAMPLES;
 
+    /* Bias should be small and steady (a few mrad/s). A large value means the
+       board moved during calibration and every angle after this will ramp. */
+    UART_Print("[calib] gyro bias rad/s: %.6f %.6f %.6f (%d samples)\r\n",
+            g_gyro_bias.x, g_gyro_bias.y, g_gyro_bias.z, NUM_SAMPLES);
+
     gyro_callibration = 0;
 }
 
@@ -124,7 +133,7 @@ uint8_t IMU_Get_Accel_Out(void)
     uint8_t buf[6];
     uint8_t status = IMU_Read_Status();
     if (!(status & STATUS_XLDA)) {
-        //UART_Print("ACCEL NOT READY: STATUS=0x%02X\r\n", status);
+        UART_Print("[accel] NOT READY: STATUS=0x%02X (last sample reused)\r\n", status);
         return 1;
     }
 
@@ -139,22 +148,24 @@ uint8_t IMU_Get_Accel_Out(void)
     g_accel_gs.y = ((float)(a_lsb_y * ACCEL_SENSITIVITY) / 1000);
     g_accel_gs.z = ((float)(a_lsb_z * ACCEL_SENSITIVITY) / 1000);
 
+    /* At rest, ~1.0 on exactly one axis and ~0 on the other two - the axis
+       holding the 1.0 is the one pointing up. mag should be ~1.00; if it is
+       not, ACCEL_SENSITIVITY or the FS bits in CTRL1_XL are wrong. */
+    UART_Print("[acc] %.3f %.3f %.3f mag %.3f\r\n",
+            g_accel_gs.x, g_accel_gs.y, g_accel_gs.z,
+            sqrtf((g_accel_gs.x*g_accel_gs.x) +
+                  (g_accel_gs.y*g_accel_gs.y) +
+                  (g_accel_gs.z*g_accel_gs.z)));
+
     return 0;
 }
 
 void IMU_Print(void)
 {
-#if 0
-    UART_Print("\n\nGyro X: %.4f  Y: %.4f  Z: %.4f\r\n\n\n",
-            g_gyro_rps.gyro_x - g_gyro_bias.x,
-            g_gyro_rps.gyro_y - g_gyro_bias.y,
-            g_gyro_rps.gyro_z - g_gyro_bias.z);
-#else
+    UART_Print("Gyro  X: %.4f  Y: %.4f  Z: %.4f\r\n",
+            g_gyro_rps.x, g_gyro_rps.y, g_gyro_rps.z);
     UART_Print("Accel X: %.4f  Y: %.4f  Z: %.4f\r\n",
-            g_accel_gs.x,
-            g_accel_gs.y,
-            g_accel_gs.z);
-#endif
+            g_accel_gs.x, g_accel_gs.y, g_accel_gs.z);
 }
 
 void IMU_Init(void)
@@ -197,11 +208,23 @@ void IMU_Mahony_Filter()
     /* Gravity Reference from Earth to Body Frame */
     v_grav_body = IMU_Predicted_Gravity_Direction();
 
+    /* Where the quaternion THINKS gravity is. Once converged this must match
+       the [acc] line above. If it settles on a sign-flipped or axis-swapped
+       version of it, the fault is g_gravity_quat or the quaternion sandwich. */
+    UART_Print("[prd] %.3f %.3f %.3f\r\n",
+            v_grav_body.x, v_grav_body.y, v_grav_body.z);
+
     /* acceleration error */
     v_accel_err = IMU_Acceleration_Error(g_accel_gs, v_grav_body);
 
     /* Get corrected orientation using PI controller Kp/Ki */
     v_gyro_corrected = IMU_Corrected_Orientation(v_accel_err);
+
+    /* err must decay toward zero at rest; bias must settle to a small
+       constant. If bias ramps without bound the integral term is diverging. */
+    UART_Print("[err] %.3f %.3f %.3f bias %.3f %.3f %.3f\r\n",
+            v_accel_err.x, v_accel_err.y, v_accel_err.z,
+            v_res_bias.x, v_res_bias.y, v_res_bias.z);
 
     /* Take derivative of quaternion */
     q_gyro_rate_of_change = IMU_Rate_Of_Change(v_gyro_corrected);
@@ -213,6 +236,12 @@ void IMU_Mahony_Filter()
     IMU_Normalize_Quat(&q_orientation_new);
 
     g_cur_quat = q_orientation_new;
+
+    /* Flat and at rest this should hold near w=1 x=0 y=0 z=0. If the quat
+       looks right but PID_Print's euler angles do not, the fault is in
+       PID_Quat_To_Euler or the axis choice, not in this filter. */
+    UART_Print("[qat] %.3f %.3f %.3f %.3f\r\n",
+            g_cur_quat.w, g_cur_quat.x, g_cur_quat.y, g_cur_quat.z);
 }
 
 Vector IMU_Cross_Product(Vector v1, Vector v2)
@@ -299,9 +328,13 @@ Vector IMU_Corrected_Orientation(Vector v_accel_err)
 {
     Vector v_gyro_corrected;
 
-    v_res_bias.x += MAHONY_KI * v_accel_err.x * CONTROL_DT;
-    v_res_bias.y += MAHONY_KI * v_accel_err.y * CONTROL_DT;
-    v_res_bias.z += MAHONY_KI * v_accel_err.z * CONTROL_DT;
+    /* Mahony is w + Kp*e + Ki*integral(e) - both corrections carry the same
+       sign. v_res_bias is defined as a bias to SUBTRACT below, so it has to
+       accumulate -Ki*e for the integral term to end up positive. Accumulating
+       +Ki*e here made the I term fight the P term and slowly diverge. */
+    v_res_bias.x -= MAHONY_KI * v_accel_err.x * CONTROL_DT;
+    v_res_bias.y -= MAHONY_KI * v_accel_err.y * CONTROL_DT;
+    v_res_bias.z -= MAHONY_KI * v_accel_err.z * CONTROL_DT;
 
     v_gyro_corrected.x = g_gyro_rps.x - v_res_bias.x + MAHONY_KP * v_accel_err.x;
     v_gyro_corrected.y = g_gyro_rps.y - v_res_bias.y + MAHONY_KP * v_accel_err.y;
