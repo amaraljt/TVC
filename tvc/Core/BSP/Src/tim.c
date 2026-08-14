@@ -42,7 +42,13 @@ void TIM2_Init(void)
         Error_Handler();
     }
     sConfigOC.OCMode = TIM_OCMODE_PWM1;
-    sConfigOC.Pulse = SERVO_CENTER_US;   /* start centered, not at an invalid 0us pulse */
+    /* Start at a valid pulse rather than 0us. NOTE: this is a generic 1500us,
+       NOT either axis's calibrated trim - the two axes trim to different
+       widths, so the gimbal sits off-neutral from power-on until the first
+       PID_Control_Loop tick writes the real values. If that startup jump
+       loads the gimbal against a stop, set each channel's Pulse to its own
+       SERVO_*_TRIM instead. */
+    sConfigOC.Pulse = SERVO_CENTER_US;
     sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
     sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
     if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)

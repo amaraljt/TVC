@@ -27,10 +27,19 @@
 #define SERVO_FRAME_HZ    50UL         /* standard hobby servo frame rate */
 
 /* Absolute pulse limits - TIM_Set_Servo_Us never commands outside these,
-   regardless of what the control loop asks for. */
+   regardless of what the control loop asks for. This is a backstop only; the
+   real per-axis limits are the SERVO_*_MIN/MAX calibration in control.c.
+
+   Widened past the usual 1000/2000 because the gimbal axes do not share a
+   neutral - one trims near 1825us and needs headroom to 2300. Keep this
+   wider than every per-axis MAX or the calibration gets silently truncated
+   here, and keep it inside what the servos physically tolerate. */
 #define SERVO_MIN_US      1000u
+#define SERVO_MAX_US      2400u
+
+/* Only used as the power-on pulse before calibration is applied - see the
+   note in TIM2_Init. Not a control-loop neutral; each axis has its own. */
 #define SERVO_CENTER_US   1500u
-#define SERVO_MAX_US      2000u
 
 #define SERVO_YAW_CH      TIM_CHANNEL_1   /* PA0 */
 #define SERVO_PITCH_CH    TIM_CHANNEL_2   /* PA1 */

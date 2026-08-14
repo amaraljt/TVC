@@ -10,39 +10,78 @@
    degree static tilt, which buries the proportional term - fast motion drove
    the servos and slow motion did nothing.
 
-   Kp: full deflection (output 4.0, i.e. SERVO_MAX_DEFLECT_US) at ~15 deg
-       tilt -> 4.0 / 0.262 rad ~= 15
+   PID output is now in GIMBAL DEGREES, so Kp is gimbal-deg per radian of
+   attitude error and Kd is gimbal-deg per (radian/second).
+
+   Kp: saturate the gimbal (MAX_DEFLECT, 6 deg) at ~15 deg of tilt
+       -> 6.0 / 0.262 rad ~= 23
    Kd: Kd/Kp ~= 0.13 s, roughly zeta 0.7 at a ~10 rad/s bandwidth */
-#define PID_KP 15.0f
-#define PID_KD 2.0f
+#define PID_KP 23.0f
+#define PID_KD 3.0f
 
-/* Microseconds of servo deflection per unit of PID output. Tune this on the
-   bench with the gimbal free to move before touching PID_KP/PID_KD. */
-#define SERVO_US_PER_PID_UNIT   100.0f
+/* ---- Servo / gimbal calibration ---------------------------------------
+   !! PLACEHOLDERS - these are Jared's friend's numbers, measured on a
+   !! DIFFERENT build (6.75" lever arm, 2026-07-31). They will be wrong for
+   !! this gimbal. TRIM in particular depends on where the horn happens to
+   !! sit on the servo spline, and USPD depends on the lever arm and linkage
+   !! geometry. Measure all of it on this hardware before flying.
 
-/* Deflection limit from center, in us. Kept inside the 1000/2000 rails so the
-   gimbal never commands the servo into its mechanical stops. */
-#define SERVO_MAX_DEFLECT_US    400.0f
+   TRIM  us that puts the gimbal at neutral (thrust line through the CG)
+   USPD  us per degree of gimbal deflection
+   MIN   us, kept inside the mechanical stop
+   MAX   us, kept inside the mechanical stop
+   SIGN  +1 or -1, whichever makes a positive command deflect the gimbal so
+         the rocket is pushed BACK toward upright. Get this backwards and the
+         loop is positive feedback. Verify by hand, one axis at a time.
+
+   Channel map here: SERVO_YAW_CH = TIM2_CH1 = PA0
+                     SERVO_PITCH_CH = TIM2_CH2 = PA1                       */
+#define SERVO_Y_TRIM    1575u
+#define SERVO_Y_USPD    44.4f
+#define SERVO_Y_MIN     1200u
+#define SERVO_Y_MAX     1900u
+#define SERVO_Y_SIGN    (+1.0f)
+
+#define SERVO_P_TRIM    1825u
+#define SERVO_P_USPD    48.5f
+#define SERVO_P_MIN     1475u
+#define SERVO_P_MAX     2300u
+#define SERVO_P_SIGN    (+1.0f)
+
+/* Gimbal deflection limit, in degrees, both axes. This is the saturation
+   point of the controller - PID output is in gimbal degrees. */
+#define MAX_DEFLECT     6.0f
 
 EulerAngle g_pid_euler_angle = {0};
 
 static PidState s_yaw_pid = {0};
 static PidState s_pitch_pid = {0};
 
-static uint32_t s_yaw_us = SERVO_CENTER_US;
-static uint32_t s_pitch_us = SERVO_CENTER_US;
+static uint32_t s_yaw_us = SERVO_Y_TRIM;
+static uint32_t s_pitch_us = SERVO_P_TRIM;
 
-/* Maps a PID output to a servo pulse width centered on SERVO_CENTER_US. */
-static uint32_t PID_Out_To_Servo_Us(float pid_out)
+/* Converts a commanded gimbal angle in degrees to a servo pulse width.
+   Clamped twice: once on the commanded angle (MAX_DEFLECT, the aerodynamic
+   /control limit) and once on the resulting pulse (MIN/MAX, the mechanical
+   stop guard). The second clamp is the one that protects the hardware. */
+static uint32_t Gimbal_To_Pulse(float cmd_deg, float sign, uint32_t trim,
+                                float uspd, uint32_t min_us, uint32_t max_us)
 {
-    float deflect_us = pid_out * SERVO_US_PER_PID_UNIT;
+    float pulse;
 
-    if (deflect_us > SERVO_MAX_DEFLECT_US)
-        deflect_us = SERVO_MAX_DEFLECT_US;
-    else if (deflect_us < -SERVO_MAX_DEFLECT_US)
-        deflect_us = -SERVO_MAX_DEFLECT_US;
+    if (cmd_deg > MAX_DEFLECT)
+        cmd_deg = MAX_DEFLECT;
+    else if (cmd_deg < -MAX_DEFLECT)
+        cmd_deg = -MAX_DEFLECT;
 
-    return (uint32_t)((float)SERVO_CENTER_US + deflect_us);
+    pulse = (float)trim + (sign * cmd_deg * uspd);
+
+    if (pulse < (float)min_us)
+        pulse = (float)min_us;
+    else if (pulse > (float)max_us)
+        pulse = (float)max_us;
+
+    return (uint32_t)pulse;
 }
 
 /* Which Euler angle drives which servo depends on how the IMU is mounted.
@@ -70,8 +109,10 @@ void PID_Control_Loop(void)
     yaw_out = PID_Control(&s_yaw_pid, yaw_err);
     pitch_out = PID_Control(&s_pitch_pid, pitch_err);
 
-    s_yaw_us = PID_Out_To_Servo_Us(yaw_out);
-    s_pitch_us = PID_Out_To_Servo_Us(pitch_out);
+    s_yaw_us = Gimbal_To_Pulse(yaw_out, SERVO_Y_SIGN, SERVO_Y_TRIM,
+                               SERVO_Y_USPD, SERVO_Y_MIN, SERVO_Y_MAX);
+    s_pitch_us = Gimbal_To_Pulse(pitch_out, SERVO_P_SIGN, SERVO_P_TRIM,
+                                 SERVO_P_USPD, SERVO_P_MIN, SERVO_P_MAX);
 
     TIM_Set_Servo_Us(SERVO_YAW_CH, s_yaw_us);
     TIM_Set_Servo_Us(SERVO_PITCH_CH, s_pitch_us);
