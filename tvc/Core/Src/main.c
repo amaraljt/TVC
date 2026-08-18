@@ -8,18 +8,23 @@
 #include "ism300dlc.h"
 #include "bmp280.h"
 #include "control.h"
+#include "w25qxx.h"
+#include <string.h>
 
 int main(void)
 {
   HAL_Init();
   SystemClock_Config();
   GPIO_Init();
+  DMA_Clock_Init();
   SPI_Init();
   UART_Init();
   TIM_Init();
 
   IMU_Init();
   BMP_Init();
+
+  Flash_Selftest();
 
   TIM_Start();
 

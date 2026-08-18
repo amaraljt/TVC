@@ -46,6 +46,7 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     Core/Src/main.c
+    Core/Src/control.c
     Core/BSP/Src/clock.c
     Core/BSP/Src/gpio.c
     Core/BSP/Src/tim.c
@@ -53,16 +54,17 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Drivers/protocol/Src/uart.c
     Drivers/sensor/Src/ism300dlc.c
     Drivers/sensor/Src/bmp280.c
-    Drivers/App/Src/control.c
+    Drivers/flash/Src/w25qxx.c
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
+    Core/Inc
     Core/BSP/Inc
     Drivers/protocol/Inc
     Drivers/sensor/Inc
-    Drivers/App/Inc
+    Drivers/flash/Inc
 )
 
 # Add project symbols (macros)

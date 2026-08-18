@@ -37,7 +37,7 @@ static int32_t s_t_fine = 0;
 uint8_t BMP_Whoami(void)
 {
     SPI_CS_Low(ALT_CS_PORT, ALT_CS_PIN);
-    uint8_t id = SPI_Send(R_ID, 0xFF, SPI_READ);
+    uint8_t id = SPI1_Send(R_ID, 0xFF, SPI_READ);
     SPI_CS_High(ALT_CS_PORT, ALT_CS_PIN);
 
     if (id != 0x58) {
@@ -50,7 +50,7 @@ uint8_t BMP_Whoami(void)
 uint8_t BMP_Read_Status(void)
 {
     SPI_CS_Low(ALT_CS_PORT, ALT_CS_PIN);
-    uint8_t status = SPI_Send(R_STATUS, 0xFF, SPI_READ);
+    uint8_t status = SPI1_Send(R_STATUS, 0xFF, SPI_READ);
     SPI_CS_High(ALT_CS_PORT, ALT_CS_PIN);
     return status;
 }
@@ -126,15 +126,15 @@ uint8_t BMP_Init(void)
     BMP_Read_Calib();
 
     SPI_CS_Low(ALT_CS_PORT, ALT_CS_PIN);
-    SPI_Send(R_CONFIG, CONFIG_CFG, SPI_WRITE);
+    SPI1_Send(R_CONFIG, CONFIG_CFG, SPI_WRITE);
     SPI_CS_High(ALT_CS_PORT, ALT_CS_PIN);
 
     SPI_CS_Low(ALT_CS_PORT, ALT_CS_PIN);
-    SPI_Send(R_OUT_CFG, CTRL_MEAS_CFG, SPI_WRITE);
+    SPI1_Send(R_OUT_CFG, CTRL_MEAS_CFG, SPI_WRITE);
     SPI_CS_High(ALT_CS_PORT, ALT_CS_PIN);
 
     SPI_CS_Low(ALT_CS_PORT, ALT_CS_PIN);
-    uint8_t readback = SPI_Send(R_OUT_CFG, 0xFF, SPI_READ);
+    uint8_t readback = SPI1_Send(R_OUT_CFG, 0xFF, SPI_READ);
     SPI_CS_High(ALT_CS_PORT, ALT_CS_PIN);
 
     if (readback != CTRL_MEAS_CFG)

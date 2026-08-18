@@ -45,7 +45,7 @@ uint8_t gyro_callibration = -1;
 uint8_t IMU_Whoami(void)
 {
     SPI_CS_Low(IMU_CS_PORT, IMU_CS_PIN);
-    uint8_t id = SPI_Send(R_WHOAMI, 0xFF, SPI_READ);
+    uint8_t id = SPI1_Send(R_WHOAMI, 0xFF, SPI_READ);
     SPI_CS_High(IMU_CS_PORT, IMU_CS_PIN);
 
     if (id != 0x6B) {
@@ -63,7 +63,7 @@ void IMU_Read_Burst(uint8_t reg, uint8_t *buf)
 uint8_t IMU_Read_Status(void)
 {
     SPI_CS_Low(IMU_CS_PORT, IMU_CS_PIN);
-    uint8_t status = SPI_Send(R_STATUS, 0xFF, SPI_READ);
+    uint8_t status = SPI1_Send(R_STATUS, 0xFF, SPI_READ);
     SPI_CS_High(IMU_CS_PORT, IMU_CS_PIN);
     return status;
 }
@@ -174,19 +174,19 @@ void IMU_Init(void)
         return;
 
     SPI_CS_Low(IMU_CS_PORT, IMU_CS_PIN);
-    SPI_Send(R_ACCEL_CFG, ODR_416_2G, SPI_WRITE);
+    SPI1_Send(R_ACCEL_CFG, ODR_416_2G, SPI_WRITE);
     SPI_CS_High(IMU_CS_PORT, IMU_CS_PIN);
 
     SPI_CS_Low(IMU_CS_PORT, IMU_CS_PIN);
-    SPI_Send(R_GYRO_CFG, ODR_416_2G, SPI_WRITE);
+    SPI1_Send(R_GYRO_CFG, ODR_416_2G, SPI_WRITE);
     SPI_CS_High(IMU_CS_PORT, IMU_CS_PIN);
 
     SPI_CS_Low(IMU_CS_PORT, IMU_CS_PIN);
-    uint8_t xl_readback = SPI_Send(R_ACCEL_CFG, 0xFF, SPI_READ);
+    uint8_t xl_readback = SPI1_Send(R_ACCEL_CFG, 0xFF, SPI_READ);
     SPI_CS_High(IMU_CS_PORT, IMU_CS_PIN);
 
     SPI_CS_Low(IMU_CS_PORT, IMU_CS_PIN);
-    uint8_t g_readback = SPI_Send(R_GYRO_CFG, 0xFF, SPI_READ);
+    uint8_t g_readback = SPI1_Send(R_GYRO_CFG, 0xFF, SPI_READ);
     SPI_CS_High(IMU_CS_PORT, IMU_CS_PIN);
 
     if (xl_readback != ODR_416_2G)
