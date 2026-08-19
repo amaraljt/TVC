@@ -84,6 +84,18 @@ static uint32_t Gimbal_To_Pulse(float cmd_deg, float sign, uint32_t trim,
     return (uint32_t)pulse;
 }
 
+/* Commands the gimbal directly, bypassing the PID - see control.h. */
+void Servo_Set_Gimbal_Deg(float yaw_deg, float pitch_deg)
+{
+    s_yaw_us = Gimbal_To_Pulse(yaw_deg, SERVO_Y_SIGN, SERVO_Y_TRIM,
+                               SERVO_Y_USPD, SERVO_Y_MIN, SERVO_Y_MAX);
+    s_pitch_us = Gimbal_To_Pulse(pitch_deg, SERVO_P_SIGN, SERVO_P_TRIM,
+                                 SERVO_P_USPD, SERVO_P_MIN, SERVO_P_MAX);
+
+    TIM_Set_Servo_Us(SERVO_YAW_CH, s_yaw_us);
+    TIM_Set_Servo_Us(SERVO_PITCH_CH, s_pitch_us);
+}
+
 /* Which Euler angle drives which servo depends on how the IMU is mounted.
    The Mahony correction is a_meas x a_pred, and a cross product is always
    perpendicular to its inputs, so the accelerometer can never correct
@@ -109,13 +121,7 @@ void PID_Control_Loop(void)
     yaw_out = PID_Control(&s_yaw_pid, yaw_err);
     pitch_out = PID_Control(&s_pitch_pid, pitch_err);
 
-    s_yaw_us = Gimbal_To_Pulse(yaw_out, SERVO_Y_SIGN, SERVO_Y_TRIM,
-                               SERVO_Y_USPD, SERVO_Y_MIN, SERVO_Y_MAX);
-    s_pitch_us = Gimbal_To_Pulse(pitch_out, SERVO_P_SIGN, SERVO_P_TRIM,
-                                 SERVO_P_USPD, SERVO_P_MIN, SERVO_P_MAX);
-
-    TIM_Set_Servo_Us(SERVO_YAW_CH, s_yaw_us);
-    TIM_Set_Servo_Us(SERVO_PITCH_CH, s_pitch_us);
+    Servo_Set_Gimbal_Deg(yaw_out, pitch_out);
 }
 
 /* Diagnostic snapshot. Call at ~1Hz from the main loop, never per-iteration -

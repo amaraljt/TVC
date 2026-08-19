@@ -20,5 +20,6 @@ void  PID_Control_Loop(void);
 void  PID_Quat_To_Euler(Quat q);
 float PID_Control(PidState *pid, float err);
 void  PID_Print(void);
+void Servo_Set_Gimbal_Deg(float yaw_deg, float pitch_deg);
 
 #endif /* CONTROL_H */

@@ -47,6 +47,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     Core/Src/main.c
     Core/Src/control.c
+    Core/Src/flight.c
     Core/BSP/Src/clock.c
     Core/BSP/Src/gpio.c
     Core/BSP/Src/tim.c

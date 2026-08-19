@@ -36,6 +36,7 @@
 Vector g_gyro_rps = {0,0,0};
 Vector g_gyro_bias = {0,0,0};
 Vector g_accel_gs = {0,0,0};
+float g_accel_mag_g = 0.0f;
 Quat g_gravity_quat = {0,0,0,1};
 Quat g_cur_quat = {1,0,0,0};
 Vector v_res_bias = {0,0,0};
@@ -92,10 +93,6 @@ uint8_t IMU_Get_Gyro_Out(void)
         g_gyro_rps.x -= g_gyro_bias.x;
         g_gyro_rps.y -= g_gyro_bias.y;
         g_gyro_rps.z -= g_gyro_bias.z;
-
-        /* post-bias rates, should sit within a few mrad/s of zero at rest */
-        UART_Print("[gyr] %.3f %.3f %.3f\r\n",
-                g_gyro_rps.x, g_gyro_rps.y, g_gyro_rps.z);
     }
 
     return 0;
@@ -148,14 +145,12 @@ uint8_t IMU_Get_Accel_Out(void)
     g_accel_gs.y = ((float)(a_lsb_y * ACCEL_SENSITIVITY) / 1000);
     g_accel_gs.z = ((float)(a_lsb_z * ACCEL_SENSITIVITY) / 1000);
 
-    /* At rest, ~1.0 on exactly one axis and ~0 on the other two - the axis
-       holding the 1.0 is the one pointing up. mag should be ~1.00; if it is
-       not, ACCEL_SENSITIVITY or the FS bits in CTRL1_XL are wrong. */
-    UART_Print("[acc] %.3f %.3f %.3f mag %.3f\r\n",
-            g_accel_gs.x, g_accel_gs.y, g_accel_gs.z,
-            sqrtf((g_accel_gs.x*g_accel_gs.x) +
-                  (g_accel_gs.y*g_accel_gs.y) +
-                  (g_accel_gs.z*g_accel_gs.z)));
+    /* Captured here, before IMU_Mahony_Filter normalizes g_accel_gs to unit
+       length and destroys the real magnitude. Flight-state thresholds in
+       flight.c read this, not g_accel_gs. */
+    g_accel_mag_g = sqrtf((g_accel_gs.x*g_accel_gs.x) +
+                           (g_accel_gs.y*g_accel_gs.y) +
+                           (g_accel_gs.z*g_accel_gs.z));
 
     return 0;
 }
@@ -208,23 +203,11 @@ void IMU_Mahony_Filter()
     /* Gravity Reference from Earth to Body Frame */
     v_grav_body = IMU_Predicted_Gravity_Direction();
 
-    /* Where the quaternion THINKS gravity is. Once converged this must match
-       the [acc] line above. If it settles on a sign-flipped or axis-swapped
-       version of it, the fault is g_gravity_quat or the quaternion sandwich. */
-    UART_Print("[prd] %.3f %.3f %.3f\r\n",
-            v_grav_body.x, v_grav_body.y, v_grav_body.z);
-
     /* acceleration error */
     v_accel_err = IMU_Acceleration_Error(g_accel_gs, v_grav_body);
 
     /* Get corrected orientation using PI controller Kp/Ki */
     v_gyro_corrected = IMU_Corrected_Orientation(v_accel_err);
-
-    /* err must decay toward zero at rest; bias must settle to a small
-       constant. If bias ramps without bound the integral term is diverging. */
-    UART_Print("[err] %.3f %.3f %.3f bias %.3f %.3f %.3f\r\n",
-            v_accel_err.x, v_accel_err.y, v_accel_err.z,
-            v_res_bias.x, v_res_bias.y, v_res_bias.z);
 
     /* Take derivative of quaternion */
     q_gyro_rate_of_change = IMU_Rate_Of_Change(v_gyro_corrected);
@@ -236,12 +219,6 @@ void IMU_Mahony_Filter()
     IMU_Normalize_Quat(&q_orientation_new);
 
     g_cur_quat = q_orientation_new;
-
-    /* Flat and at rest this should hold near w=1 x=0 y=0 z=0. If the quat
-       looks right but PID_Print's euler angles do not, the fault is in
-       PID_Quat_To_Euler or the axis choice, not in this filter. */
-    UART_Print("[qat] %.3f %.3f %.3f %.3f\r\n",
-            g_cur_quat.w, g_cur_quat.x, g_cur_quat.y, g_cur_quat.z);
 }
 
 Vector IMU_Cross_Product(Vector v1, Vector v2)

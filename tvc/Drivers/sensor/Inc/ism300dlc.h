@@ -24,6 +24,13 @@ extern Vector g_gyro_bias;
 extern Vector g_accel_gs;
 extern Quat   g_cur_quat;
 
+/* Raw |accel| in g, captured in IMU_Get_Accel_Out before IMU_Mahony_Filter
+   normalizes g_accel_gs to unit length. g_accel_gs alone cannot be used to
+   detect launch/burnout/landing by magnitude - by the time anything outside
+   the filter looks at it, the real g-force is gone and it always reads
+   ~1.0. This is the value flight-phase detection should use instead. */
+extern float g_accel_mag_g;
+
 void IMU_Init(void);
 void IMU_Read_Burst(uint8_t reg, uint8_t *buf);
 uint8_t IMU_Read_Status(void);

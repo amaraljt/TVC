@@ -9,6 +9,7 @@
 #include "bmp280.h"
 #include "control.h"
 #include "w25qxx.h"
+#include "flight.h"
 #include <string.h>
 
 int main(void)
@@ -23,8 +24,6 @@ int main(void)
 
   IMU_Init();
   BMP_Init();
-
-  Flash_Selftest();
 
   TIM_Start();
 
@@ -42,7 +41,13 @@ int main(void)
     IMU_Get_Accel_Out();
     IMU_Mahony_Filter();
 
-    PID_Control_Loop();
+    Flight_Update();
+
+    /* will this be too slow? */
+    if (g_flight_state == FLIGHT_BOOST)
+      PID_Control_Loop();
+    else
+      Servo_Set_Gimbal_Deg(0.0f, 0.0f);   /* held at trim outside BOOST */
 
     if ((tick % CONTROL_RATE_HZ) == 0)
       PID_Print();
